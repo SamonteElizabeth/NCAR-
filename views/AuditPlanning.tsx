@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { AuditPlan, AuditStatus, Role } from '../types';
 import { 
   Plus, 
@@ -13,7 +13,11 @@ import {
   Paperclip, 
   FileIcon, 
   Check, 
-  ChevronDown 
+  ChevronDown,
+  ArrowRightCircle,
+  Search,
+  Filter,
+  CalendarDays
 } from 'lucide-react';
 import { USERS } from '../mockData';
 
@@ -61,7 +65,7 @@ const MultiSelectDropdown = ({
       <label className="text-xs font-black text-gray-400 uppercase tracking-widest block mb-2">{label}</label>
       <div 
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full bg-gray-50 border-gray-200 border-2 rounded-xl p-3 flex items-center justify-between cursor-pointer focus:ring-4 focus:ring-blue-50 focus:border-blue-500 transition-all min-h-[48px]"
+        className="w-full bg-gray-50 border-gray-200 border-2 rounded-xl p-3 flex items-center justify-between cursor-pointer focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all min-h-[48px]"
       >
         <div className="flex flex-wrap gap-1.5">
           {selected.length > 0 ? (
@@ -111,18 +115,34 @@ const AuditPlanning: React.FC<AuditPlanningProps> = ({ plans, setPlans, role, on
     attachmentName: ''
   });
 
+  // Filter States
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All Status');
+  const [dateFilter, setDateFilter] = useState('');
+
   const isLead = role === 'LEAD_AUDITOR';
   
   const ALL_AUDITORS = USERS.filter(u => u.role === 'AUDITOR' || u.role === 'LEAD_AUDITOR').map(u => u.name);
   const ALL_AUDITEES = USERS.filter(u => u.role === 'AUDITEE').map(u => u.name);
 
+  const getNextStatus = (current: AuditStatus): AuditStatus | null => {
+    switch (current) {
+      case AuditStatus.DRAFT: return AuditStatus.PLANNED;
+      case AuditStatus.PLANNED: return AuditStatus.ACTUAL;
+      case AuditStatus.ACTUAL: return AuditStatus.CLOSED;
+      default: return null;
+    }
+  };
+
   const updateStatus = (id: string) => {
     if (!isLead) return;
     setPlans(prev => prev.map(p => {
       if (p.id === id) {
-        const nextStatus = p.status === AuditStatus.PLANNED ? AuditStatus.ACTUAL : AuditStatus.COMPLETED;
-        onNotify(`Status updated to ${nextStatus} for ${p.id}`, 'success');
-        return { ...p, status: nextStatus };
+        const next = getNextStatus(p.status);
+        if (next) {
+          onNotify(`Status updated to ${next} for ${p.id}`, 'success');
+          return { ...p, status: next };
+        }
       }
       return p;
     }));
@@ -173,12 +193,12 @@ const AuditPlanning: React.FC<AuditPlanningProps> = ({ plans, setPlans, role, on
         auditors: formData.auditors,
         auditees: formData.auditees,
         attachmentName: formData.attachmentName || 'No attachment',
-        status: AuditStatus.PLANNED,
+        status: AuditStatus.DRAFT,
         isLocked: false,
         createdAt: now.toISOString()
       };
       setPlans(prev => [newPlan, ...prev]);
-      onNotify('New Audit Plan created and scheduled.', 'success');
+      onNotify('New Audit Plan drafted.', 'success');
     }
     closeModal();
   };
@@ -195,12 +215,39 @@ const AuditPlanning: React.FC<AuditPlanningProps> = ({ plans, setPlans, role, on
     });
   };
 
+  const filteredPlans = useMemo(() => {
+    return plans.filter(p => {
+      const matchesSearch = p.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            p.auditors.some(a => a.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                            p.auditees.some(a => a.toLowerCase().includes(searchQuery.toLowerCase()));
+      
+      const matchesStatus = statusFilter === 'All Status' || p.status === statusFilter;
+      
+      let matchesDate = true;
+      if (dateFilter) {
+        // Filter: Selected date must be within start and end range of the audit
+        const sel = new Date(dateFilter).getTime();
+        const start = new Date(p.startDate).getTime();
+        const end = new Date(p.endDate).getTime();
+        matchesDate = sel >= start && sel <= end;
+      }
+
+      return matchesSearch && matchesStatus && matchesDate;
+    });
+  }, [plans, searchQuery, statusFilter, dateFilter]);
+
+  const clearFilters = () => {
+    setSearchQuery('');
+    setStatusFilter('All Status');
+    setDateFilter('');
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
         <div>
-          <h3 className="text-3xl font-black text-gray-900">Audit Schedules</h3>
-          <p className="text-base text-gray-500 font-medium">Manage and track your internal audits across departments.</p>
+          <h3 className="text-3xl font-black text-gray-900 tracking-tight">Audit Schedule</h3>
+          <p className="text-base text-gray-500 font-medium mt-1">Manage lifecycle from Draft through Closure.</p>
         </div>
         
         {isLead && (
@@ -214,93 +261,150 @@ const AuditPlanning: React.FC<AuditPlanningProps> = ({ plans, setPlans, role, on
         )}
       </div>
 
-      <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden text-base">
+      {/* Filter Bar */}
+      <div className="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm flex flex-col md:flex-row gap-6">
+        <div className="flex-1 relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+          <input 
+            type="text" 
+            placeholder="Search plans by ID or User..." 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-12 pr-6 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-blue-500 text-base font-medium"
+          />
+        </div>
+        <div className="flex flex-col sm:flex-row gap-4 items-center">
+          <div className="relative w-full sm:w-auto">
+            <CalendarDays className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={20} />
+            <input 
+              type="date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              title="Filter by active date"
+              className="w-full sm:w-48 pl-12 pr-4 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-blue-500 text-base font-black text-gray-600 outline-none cursor-pointer"
+            />
+          </div>
+          <select 
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="w-full sm:w-48 bg-gray-50 border-none rounded-2xl px-7 py-4 text-base font-black text-gray-600 outline-none cursor-pointer focus:ring-2 focus:ring-blue-500"
+          >
+            <option>All Status</option>
+            {Object.values(AuditStatus).map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          {(searchQuery || statusFilter !== 'All Status' || dateFilter) && (
+            <button 
+              onClick={clearFilters}
+              className="px-4 py-4 text-gray-400 hover:text-red-500 transition-colors"
+              title="Clear all filters"
+            >
+              <X size={20} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-[#3b82f6] text-white">
-                <th className="px-8 py-6 text-xs font-black uppercase tracking-widest">Plan ID</th>
-                <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-center">Attachment</th>
-                <th className="px-8 py-6 text-xs font-black uppercase tracking-widest">Date Range</th>
-                <th className="px-8 py-6 text-xs font-black uppercase tracking-widest">Auditors / Auditees</th>
-                <th className="px-8 py-6 text-xs font-black uppercase tracking-widest">Status</th>
-                <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-center">Actions</th>
+                <th className="px-8 py-6 text-[12px] font-black uppercase tracking-widest">Plan ID</th>
+                <th className="px-8 py-6 text-[12px] font-black uppercase tracking-widest text-center">Docs</th>
+                <th className="px-8 py-6 text-[12px] font-black uppercase tracking-widest">Start Date</th>
+                <th className="px-8 py-6 text-[12px] font-black uppercase tracking-widest">End Date</th>
+                <th className="px-8 py-6 text-[12px] font-black uppercase tracking-widest">Teams</th>
+                <th className="px-8 py-6 text-[12px] font-black uppercase tracking-widest">Status</th>
+                <th className="px-8 py-6 text-[12px] font-black uppercase tracking-widest text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {plans.map((plan) => (
-                <tr key={plan.id} className="hover:bg-blue-50/30 transition-colors group">
-                  <td className="px-8 py-6">
-                    <span className="text-[11px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded uppercase tracking-tighter border border-blue-100">{plan.id}</span>
-                  </td>
-                  <td className="px-8 py-6 text-center">
-                    {plan.attachmentName ? (
-                       <div className="flex flex-col items-center gap-1 group/file cursor-pointer" onClick={() => onNotify(`Downloading ${plan.attachmentName}`)}>
-                         <FileIcon size={20} className="text-blue-500 group-hover/file:scale-110 transition-transform" />
-                         <span className="text-[10px] font-bold text-gray-400 truncate max-w-[80px]">{plan.attachmentName}</span>
-                       </div>
-                    ) : (
-                      <span className="text-xs text-gray-300">N/A</span>
-                    )}
-                  </td>
-                  <td className="px-8 py-6">
-                    <div className="flex items-center gap-2.5 text-sm text-gray-600 font-bold">
-                      <Calendar size={18} className="text-gray-400" />
-                      {plan.startDate} <ChevronRight size={14} className="text-gray-300" /> {plan.endDate}
-                    </div>
-                  </td>
-                  <td className="px-8 py-6">
-                    <div className="flex flex-col gap-1.5">
-                      <div className="flex items-start gap-1.5 text-xs text-blue-600 font-black uppercase">
-                        <Users size={14} className="mt-0.5 flex-shrink-0" />
-                        <span>Ar: {plan.auditors.join(', ')}</span>
-                      </div>
-                      <div className="flex items-start gap-1.5 text-xs text-gray-500 font-bold uppercase">
-                        <Users size={14} className="mt-0.5 flex-shrink-0" />
-                        <span>Ae: {plan.auditees.join(', ')}</span>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-8 py-6">
-                    <span className={`text-xs font-black px-3.5 py-1.5 rounded-full uppercase border ${
-                      plan.status === AuditStatus.PLANNED ? 'bg-gray-50 text-gray-500 border-gray-200' :
-                      plan.status === AuditStatus.ACTUAL ? 'bg-orange-50 text-orange-600 border-orange-200' : 'bg-green-50 text-green-600 border-green-200'
-                    }`}>
-                      {plan.status}
-                    </span>
-                  </td>
-                  <td className="px-8 py-6">
-                    <div className="flex items-center justify-center gap-3">
-                      <button 
-                        onClick={() => onNotify(`Viewing audit trail for ${plan.id}`)}
-                        className="p-2.5 text-gray-400 hover:text-blue-600 hover:bg-white rounded-xl transition-all"
-                        title="Audit Trail"
-                      >
-                        <FileText size={22} />
-                      </button>
-                      {isLead && (
-                        <>
-                          <button 
-                            onClick={() => handleEdit(plan)}
-                            className="p-2.5 text-gray-400 hover:text-blue-600 hover:bg-white rounded-xl transition-all"
-                            title="Edit Plan"
-                          >
-                            <Edit3 size={22} />
-                          </button>
-                          {plan.status !== AuditStatus.COMPLETED && (
-                            <button 
-                              onClick={() => updateStatus(plan.id)}
-                              className="bg-gray-50 text-gray-700 hover:bg-blue-600 hover:text-white px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-sm"
-                            >
-                              {plan.status === AuditStatus.PLANNED ? 'Activate' : 'Complete'}
-                            </button>
-                          )}
-                        </>
-                      )}
+              {filteredPlans.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-8 py-20 text-center">
+                    <div className="flex flex-col items-center opacity-40">
+                      <Search size={48} className="mb-4" />
+                      <p className="font-black uppercase tracking-widest">No plans matching criteria</p>
                     </div>
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filteredPlans.map((plan) => (
+                  <tr key={plan.id} className="hover:bg-blue-50/30 transition-colors group">
+                    <td className="px-8 py-6">
+                      <span className="text-[12px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded uppercase tracking-tighter border border-blue-100">{plan.id}</span>
+                    </td>
+                    <td className="px-8 py-6 text-center">
+                      {plan.attachmentName ? (
+                         <div className="flex flex-col items-center gap-1 group/file cursor-pointer" onClick={() => onNotify(`Downloading ${plan.attachmentName}`)}>
+                           <FileIcon size={18} className="text-blue-500 group-hover/file:scale-110 transition-transform" />
+                           <span className="text-[9px] font-black text-gray-400 truncate max-w-[80px] uppercase tracking-tighter">{plan.attachmentName}</span>
+                         </div>
+                      ) : (
+                        <span className="text-[12px] text-gray-300">N/A</span>
+                      )}
+                    </td>
+                    <td className="px-8 py-6">
+                      <div className="flex items-center gap-2.5 text-[12px] text-gray-600 font-bold">
+                        <Calendar size={16} className="text-gray-400" />
+                        {plan.startDate}
+                      </div>
+                    </td>
+                    <td className="px-8 py-6">
+                      <div className="flex items-center gap-2.5 text-[12px] text-gray-600 font-bold">
+                        <Calendar size={16} className="text-gray-400" />
+                        {plan.endDate}
+                      </div>
+                    </td>
+                    <td className="px-8 py-6">
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-start gap-1.5 text-[12px] text-blue-600 font-black uppercase tracking-tighter">
+                          <Users size={14} className="mt-0.5 flex-shrink-0" />
+                          <span>Auditors: {plan.auditors.join(', ')}</span>
+                        </div>
+                        <div className="flex items-start gap-1.5 text-[12px] text-gray-500 font-bold uppercase tracking-tighter">
+                          <Users size={14} className="mt-0.5 flex-shrink-0" />
+                          <span>Auditees: {plan.auditees.join(', ')}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-8 py-6">
+                      <span className={`text-[11px] font-black px-3 py-1 rounded-full uppercase border ${
+                        plan.status === AuditStatus.DRAFT ? 'bg-gray-50 text-gray-400 border-gray-200' :
+                        plan.status === AuditStatus.PLANNED ? 'bg-blue-50 text-blue-500 border-blue-100' :
+                        plan.status === AuditStatus.ACTUAL ? 'bg-orange-50 text-orange-600 border-orange-100' : 
+                        'bg-green-50 text-green-600 border-green-100'
+                      }`}>
+                        {plan.status}
+                      </span>
+                    </td>
+                    <td className="px-8 py-6">
+                      <div className="flex items-center justify-center gap-2">
+                        {isLead && (
+                          <>
+                            <button 
+                              onClick={() => handleEdit(plan)}
+                              className="p-2 text-gray-400 hover:text-blue-600 hover:bg-white rounded-xl transition-all"
+                              title="Edit Plan"
+                            >
+                              <Edit3 size={18} />
+                            </button>
+                            {getNextStatus(plan.status) && (
+                              <button 
+                                onClick={() => updateStatus(plan.id)}
+                                className="p-2 text-blue-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+                                title={`Advance to ${getNextStatus(plan.status)}`}
+                              >
+                                <ArrowRightCircle size={18} />
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -334,7 +438,7 @@ const AuditPlanning: React.FC<AuditPlanningProps> = ({ plans, setPlans, role, on
                       type="date" 
                       value={formData.startDate}
                       onChange={(e) => setFormData({...formData, startDate: e.target.value})}
-                      className="w-full bg-gray-50 border-gray-200 border-2 rounded-xl p-3 focus:ring-4 focus:ring-blue-50 focus:border-blue-500 transition-all outline-none font-bold text-sm" 
+                      className="w-full bg-gray-50 border-gray-200 border-2 rounded-xl p-3 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none font-bold text-sm" 
                     />
                   </div>
                   <div>
@@ -344,7 +448,7 @@ const AuditPlanning: React.FC<AuditPlanningProps> = ({ plans, setPlans, role, on
                       type="date" 
                       value={formData.endDate}
                       onChange={(e) => setFormData({...formData, endDate: e.target.value})}
-                      className="w-full bg-gray-50 border-gray-200 border-2 rounded-xl p-3 focus:ring-4 focus:ring-blue-50 focus:border-blue-500 transition-all outline-none font-bold text-sm" 
+                      className="w-full bg-gray-50 border-gray-200 border-2 rounded-xl p-3 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none font-bold text-sm" 
                     />
                   </div>
                 </div>
@@ -387,10 +491,10 @@ const AuditPlanning: React.FC<AuditPlanningProps> = ({ plans, setPlans, role, on
                 </div>
 
                 <div className="flex gap-4 pt-6 border-t border-gray-100">
-                  <button type="button" onClick={closeModal} className="flex-1 px-6 py-3.5 bg-white border-2 border-gray-200 rounded-2xl font-black text-gray-500 hover:bg-gray-50 transition-all text-sm">Discard</button>
-                  <button type="submit" className="flex-[1.5] px-6 py-3.5 bg-[#3b82f6] text-white rounded-2xl font-black hover:bg-blue-600 shadow-xl shadow-blue-200 transition-all flex items-center justify-center gap-3 text-sm">
+                  <button type="button" onClick={closeModal} className="flex-1 px-6 py-3.5 bg-white border-2 border-gray-200 rounded-2xl font-black text-gray-500 hover:bg-gray-50 transition-all text-sm uppercase tracking-widest">Discard</button>
+                  <button type="submit" className="flex-[1.5] px-6 py-3.5 bg-[#3b82f6] text-white rounded-2xl font-black hover:bg-blue-600 shadow-xl shadow-blue-200 transition-all flex items-center justify-center gap-3 text-sm uppercase tracking-widest">
                     <CheckCircle2 size={20} />
-                    {editingId ? 'Save Changes' : 'Create Schedule'}
+                    {editingId ? 'Save Changes' : 'Create Draft'}
                   </button>
                 </div>
               </div>

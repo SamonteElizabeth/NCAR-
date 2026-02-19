@@ -86,8 +86,11 @@ const App: React.FC = () => {
         <NCARModule 
           ncars={ncars} 
           setNcars={setNcars} 
+          actionPlans={actionPlans}
+          setActionPlans={setActionPlans}
           role={currentRole} 
           onNotify={notify} 
+          setActiveModule={setActiveModule}
         />
       );
       case 'actions': return (

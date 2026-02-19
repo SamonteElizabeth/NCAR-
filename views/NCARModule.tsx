@@ -1,29 +1,124 @@
-
-import React, { useState } from 'react';
-import { NCAR, NCARStatus, Role } from '../types';
-import { AlertTriangle, Clock, MapPin, User, FileText, Plus, Search, Filter, X, ChevronRight, CheckCircle2 } from 'lucide-react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { NCAR, NCARStatus, Role, ActionPlan } from '../types';
+import { 
+  AlertTriangle, 
+  User, 
+  FileText, 
+  Plus, 
+  Search, 
+  Filter, 
+  X, 
+  Check, 
+  Paperclip, 
+  Edit3, 
+  Save, 
+  Eye, 
+  ArrowRight,
+  ShieldAlert,
+  FileUp,
+  Send,
+  AlertCircle,
+  Clock,
+  Calendar,
+  ShieldCheck,
+  CheckCircle2,
+  XCircle,
+  MessageSquare,
+  RefreshCcw,
+  PlusCircle,
+  Eraser
+} from 'lucide-react';
 
 interface NCARModuleProps {
   ncars: NCAR[];
   setNcars: React.Dispatch<React.SetStateAction<NCAR[]>>;
+  actionPlans: ActionPlan[];
+  setActionPlans: React.Dispatch<React.SetStateAction<ActionPlan[]>>;
   role: Role;
   onNotify: (msg: string, type?: 'info' | 'success' | 'warning') => void;
+  setActiveModule?: (module: string) => void;
 }
 
-const NCARModule: React.FC<NCARModuleProps> = ({ ncars, setNcars, role, onNotify }) => {
-  const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState({
-    type: 'Major' as 'Major' | 'Minor' | 'OFI',
-    area: '',
-    clause: '',
-    statement: '',
-    evidence: '',
-    auditee: 'Bob Johnson'
-  });
+const FINDING_AREAS = [
+  'Finance', 'Operations', 'IT Infrastructure', 'Human Resources', 
+  'Supply Chain', 'Customer Support', 'Quality Assurance', 'Legal & Compliance'
+];
 
+const REQUIREMENTS = [
+  'ISO 27001 Clause 8.1', 'ISO 27001 Clause A.9.4', 'ISO 9001 Clause 4.4',
+  'ISO 9001 Clause 9.2', 'ISO 14001 Clause 6.1', 'Financial Policy Section 4.2',
+  'IT Security Policy v2.1', 'Employee Handbook Sec 5'
+];
+
+const NCARModule: React.FC<NCARModuleProps> = ({ 
+  ncars, 
+  setNcars, 
+  actionPlans, 
+  setActionPlans, 
+  role, 
+  onNotify, 
+  setActiveModule 
+}) => {
+  const [showForm, setShowForm] = useState(false);
+  const [viewingNCAR, setViewingNCAR] = useState<NCAR | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [isCreatingActionPlan, setIsCreatingActionPlan] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
+  
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectionRemarks, setRejectionRemarks] = useState('');
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All Status');
+  const [typeFilters, setTypeFilters] = useState<string[]>([]);
+
+  const isAuditee = role === 'AUDITEE';
+  const isLead = role === 'LEAD_AUDITOR';
+  const isAuditor = role === 'AUDITOR';
   const canCreate = role === 'LEAD_AUDITOR' || role === 'AUDITOR';
 
+  const getInitialDueDate = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return d.toISOString().split('T')[0];
+  };
+
+  const initialFormData = {
+    type: 'Major' as 'Major' | 'Minor' | 'OFI',
+    area: FINDING_AREAS[0],
+    clause: REQUIREMENTS[0],
+    statement: '',
+    evidence: '',
+    auditee: 'Bob Johnson',
+    attachmentName: '',
+    dueDate: getInitialDueDate()
+  };
+
+  const [formData, setFormData] = useState(initialFormData);
+
+  const initialApFormData = {
+    correction: '',
+    rootCause: '',
+    actionPlan: '',
+    responsible: 'Bob Johnson',
+    dueDate: getInitialDueDate(),
+    attachmentName: ''
+  };
+
+  const [apFormData, setApFormData] = useState(initialApFormData);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
+        setShowFilters(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const getDaysRemaining = (deadline: string) => {
+    if (!deadline) return 0;
     const d = new Date(deadline);
     const now = new Date();
     const diff = d.getTime() - now.getTime();
@@ -31,50 +126,191 @@ const NCARModule: React.FC<NCARModuleProps> = ({ ncars, setNcars, role, onNotify
     return days > 0 ? days : 0;
   };
 
-  const handleRaiseNCAR = (e: React.FormEvent) => {
-    e.preventDefault();
-    const now = new Date();
-    const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const deadline = new Date();
-    deadline.setDate(deadline.getDate() + 7);
+  const handleAction = (ncar: NCAR) => {
+    setViewingNCAR(ncar);
+    setFormData({
+      type: ncar.findingType,
+      area: ncar.area,
+      clause: ncar.requirement,
+      statement: ncar.statement,
+      evidence: ncar.evidence,
+      auditee: ncar.auditee,
+      attachmentName: ncar.attachmentName || '',
+      dueDate: ncar.deadline.split('T')[0]
+    });
 
-    const newNCAR: NCAR = {
-      id: `NCAR_${String(ncars.length + 1).padStart(6, '0')}_${timestamp}`,
-      auditPlanId: 'AP_UNKNOWN',
-      statement: formData.statement,
-      requirement: formData.clause,
-      evidence: formData.evidence,
-      findingType: formData.type,
-      standardClause: formData.clause.split(' ')[0] || '8.1',
-      area: formData.area,
-      auditor: 'Current User',
-      auditee: formData.auditee,
-      createdAt: now.toISOString(),
-      status: NCARStatus.OPEN,
-      deadline: deadline.toISOString()
-    };
+    const existingAp = actionPlans.find(ap => ap.ncarId === ncar.id);
+    if (existingAp) {
+      setApFormData({
+        correction: existingAp.immediateCorrection,
+        rootCause: existingAp.rootCause,
+        actionPlan: existingAp.correctiveAction,
+        responsible: existingAp.responsiblePerson,
+        dueDate: existingAp.dueDate,
+        attachmentName: existingAp.remarks || ''
+      });
+    } else {
+      setApFormData(initialApFormData);
+    }
 
-    setNcars(prev => [newNCAR, ...prev]);
-    setShowForm(false);
-    onNotify('NCAR successfully raised and assigned.', 'success');
-    setFormData({ type: 'Major', area: '', clause: '', statement: '', evidence: '', auditee: 'Bob Johnson' });
+    setIsCreatingActionPlan(false);
+    setShowForm(true);
   };
 
+  const handleApprove = () => {
+    if (!viewingNCAR || !isLead) return;
+    setNcars(prev => prev.map(n => n.id === viewingNCAR.id ? { ...n, status: NCARStatus.CLOSED, rejectionRemarks: undefined } : n));
+    onNotify(`NCAR ${viewingNCAR.id} Approved and Closed.`, 'success');
+    closeForm();
+  };
+
+  const handleInitiateReject = () => {
+    setShowRejectModal(true);
+  };
+
+  const finalizeRejection = () => {
+    if (!viewingNCAR || !rejectionRemarks.trim()) return;
+    setNcars(prev => prev.map(n => n.id === viewingNCAR.id ? { 
+      ...n, 
+      status: NCARStatus.REOPENED,
+      rejectionRemarks: rejectionRemarks
+    } : n));
+    onNotify(`NCAR ${viewingNCAR.id} Rejected: ${rejectionRemarks}`, 'warning');
+    setShowRejectModal(false);
+    setRejectionRemarks('');
+    closeForm();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setFormData({ ...formData, attachmentName: e.target.files[0].name });
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isAuditee) return;
+
+    const now = new Date();
+    if (viewingNCAR) {
+      setNcars(prev => prev.map(n => n.id === viewingNCAR.id ? {
+        ...n,
+        statement: formData.statement,
+        requirement: formData.clause,
+        evidence: formData.evidence,
+        findingType: formData.type,
+        standardClause: formData.clause.split(' ').pop() || '8.1',
+        area: formData.area,
+        auditee: formData.auditee,
+        attachmentName: formData.attachmentName,
+        deadline: formData.dueDate
+      } : n));
+      onNotify(`NCAR ${viewingNCAR.id} updated.`, 'success');
+    } else {
+      const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const newNCAR: NCAR = {
+        id: `NCAR_${String(ncars.length + 1).padStart(6, '0')}_${timestamp}`,
+        auditPlanId: 'AP_UNKNOWN',
+        statement: formData.statement,
+        requirement: formData.clause,
+        evidence: formData.evidence,
+        findingType: formData.type,
+        standardClause: formData.clause.split(' ').pop() || '8.1',
+        area: formData.area,
+        auditor: 'Current User',
+        auditee: formData.auditee,
+        createdAt: now.toISOString(),
+        status: NCARStatus.OPEN,
+        deadline: formData.dueDate,
+        attachmentName: formData.attachmentName
+      };
+      setNcars(prev => [newNCAR, ...prev]);
+      onNotify('NCAR raised and assigned.', 'success');
+    }
+    closeForm();
+  };
+
+  const handleApSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!viewingNCAR) return;
+
+    const now = new Date();
+    const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const newAP: ActionPlan = {
+      id: `ACT_${String(actionPlans.length + 1).padStart(6, '0')}_${timestamp}`,
+      ncarId: viewingNCAR.id,
+      immediateCorrection: apFormData.correction,
+      responsiblePerson: apFormData.responsible,
+      rootCause: apFormData.rootCause,
+      correctiveAction: apFormData.actionPlan,
+      dueDate: apFormData.dueDate,
+      submittedAt: now.toISOString(),
+      remarks: apFormData.attachmentName
+    };
+
+    setActionPlans(prev => [...prev.filter(ap => ap.ncarId !== viewingNCAR.id), newAP]);
+    setNcars(prev => prev.map(n => n.id === viewingNCAR.id ? { ...n, status: NCARStatus.ACTION_PLAN_SUBMITTED, rejectionRemarks: undefined } : n));
+    onNotify(`Action Plan for ${viewingNCAR.id} submitted successfully.`, 'success');
+    closeForm();
+  };
+
+  const handleApFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setApFormData({ ...apFormData, attachmentName: e.target.files[0].name });
+    }
+  };
+
+  const closeForm = () => {
+    setShowForm(false);
+    setViewingNCAR(null);
+    setIsCreatingActionPlan(false);
+    setFormData(initialFormData);
+    setApFormData(initialApFormData);
+  };
+
+  const initiateFreshPlan = () => {
+    setApFormData(initialApFormData);
+    setIsCreatingActionPlan(true);
+    onNotify("Started a fresh action plan draft.", "info");
+  };
+
+  const filteredNCARs = useMemo(() => {
+    return ncars.filter(ncar => {
+      const matchesSearch = ncar.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            ncar.requirement.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            ncar.area.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      let matchesStatus = statusFilter === 'All Status';
+      if (!matchesStatus) {
+        if (statusFilter === 'Pending') {
+          matchesStatus = ncar.status === NCARStatus.OPEN || ncar.status === NCARStatus.ACTION_PLAN_SUBMITTED || ncar.status === NCARStatus.REOPENED;
+        } else if (statusFilter === 'Rejected') {
+          matchesStatus = ncar.status === NCARStatus.REJECTED || ncar.status === NCARStatus.REOPENED;
+        } else if (statusFilter === 'Approved') {
+          matchesStatus = ncar.status === NCARStatus.VALIDATED || ncar.status === NCARStatus.CLOSED;
+        } else if (statusFilter === 'Closed') {
+          matchesStatus = ncar.status === NCARStatus.CLOSED;
+        }
+      }
+
+      const matchesType = typeFilters.length === 0 || typeFilters.includes(ncar.findingType);
+      return matchesSearch && matchesStatus && matchesType;
+    });
+  }, [ncars, searchQuery, statusFilter, typeFilters]);
+
   return (
-    <div className="space-y-8 text-base">
+    <div className="space-y-8">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
         <div>
           <h3 className="text-3xl font-black text-gray-900 tracking-tight">Non-Conformance Reports</h3>
-          <p className="text-lg text-gray-500 font-medium">Log findings, track deadlines, and monitor non-compliance.</p>
+          <p className="text-lg text-gray-500 font-medium">Log findings and track departmental compliance.</p>
         </div>
-        
         {canCreate && (
           <button 
-            onClick={() => setShowForm(true)}
-            className="flex items-center gap-3 bg-[#3b82f6] hover:bg-blue-600 text-white px-8 py-4 rounded-2xl font-black transition-all shadow-xl shadow-blue-200 text-base"
+            onClick={() => { setViewingNCAR(null); setFormData(initialFormData); setShowForm(true); }}
+            className="flex items-center gap-3 bg-[#3b82f6] hover:bg-blue-600 text-white px-8 py-4 rounded-2xl font-black shadow-xl shadow-blue-200 transition-all"
           >
-            <Plus size={24} />
-            Raise NCAR
+            <Plus size={24} /> NCAR
           </button>
         )}
       </div>
@@ -84,20 +320,45 @@ const NCARModule: React.FC<NCARModuleProps> = ({ ncars, setNcars, role, onNotify
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
           <input 
             type="text" 
-            placeholder="Search by NCAR ID, Clause, or Area..." 
+            placeholder="Search NCARs..." 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-12 pr-6 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-blue-500 text-base font-medium"
           />
         </div>
-        <div className="flex gap-3">
-          <button className="flex items-center gap-3 px-7 py-4 bg-gray-50 rounded-2xl text-base font-black text-gray-600 hover:bg-gray-100 transition-colors">
-            <Filter size={20} />
-            Filters
+        <div className="flex gap-3 relative" ref={filterRef}>
+          <button 
+            onClick={() => setShowFilters(!showFilters)}
+            className="flex items-center gap-3 px-7 py-4 bg-gray-50 rounded-2xl text-base font-black text-gray-600 hover:bg-gray-100 transition-all"
+          >
+            <Filter size={20} /> Filters
           </button>
-          <select className="bg-gray-50 border-none rounded-2xl px-7 py-4 text-base font-black text-gray-600 focus:ring-2 focus:ring-blue-500 outline-none">
-            <option>All Status</option>
-            <option>Open</option>
-            <option>Submitted</option>
-            <option>Closed</option>
+          {showFilters && (
+            <div className="absolute top-full right-0 mt-3 w-64 bg-white border border-gray-100 rounded-2xl shadow-2xl p-4 z-40">
+              <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-3">Finding Types</span>
+              {['Major', 'Minor', 'OFI'].map(type => (
+                <label key={type} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={typeFilters.includes(type)}
+                    onChange={() => setTypeFilters(prev => prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type])}
+                    className="w-4 h-4 rounded text-blue-600"
+                  />
+                  <span className="text-sm font-bold text-gray-700">{type}</span>
+                </label>
+              ))}
+            </div>
+          )}
+          <select 
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="bg-gray-50 border-none rounded-2xl px-7 py-4 text-base font-black text-gray-600 outline-none cursor-pointer focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="All Status">All</option>
+            <option value="Pending">Pending</option>
+            <option value="Rejected">Rejected</option>
+            <option value="Approved">Approved</option>
+            <option value="Closed">Closed</option>
           </select>
         </div>
       </div>
@@ -107,199 +368,474 @@ const NCARModule: React.FC<NCARModuleProps> = ({ ncars, setNcars, role, onNotify
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-[#3b82f6] text-white">
-                <th className="px-8 py-6 text-xs font-black uppercase tracking-widest">NCAR ID</th>
-                <th className="px-8 py-6 text-xs font-black uppercase tracking-widest">Type</th>
-                <th className="px-8 py-6 text-xs font-black uppercase tracking-widest">Requirement</th>
-                <th className="px-8 py-6 text-xs font-black uppercase tracking-widest">Area / Clause</th>
-                <th className="px-8 py-6 text-xs font-black uppercase tracking-widest">Assigned Auditee</th>
-                <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-center">Deadline</th>
-                <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-center">Status</th>
+                <th className="px-8 py-6 text-[12px] font-black uppercase tracking-widest">NCAR ID</th>
+                <th className="px-8 py-6 text-[12px] font-black uppercase tracking-widest">Finding Type</th>
+                <th className="px-8 py-6 text-[12px] font-black uppercase tracking-widest">Requirement</th>
+                <th className="px-8 py-6 text-[12px] font-black uppercase tracking-widest text-center">Deadline</th>
+                <th className="px-8 py-6 text-[12px] font-black uppercase tracking-widest text-center">Status</th>
+                <th className="px-8 py-6 text-[12px] font-black uppercase tracking-widest text-center">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {ncars.map((ncar) => {
-                const daysLeft = getDaysRemaining(ncar.deadline);
-                return (
-                  <tr key={ncar.id} className="hover:bg-blue-50/30 transition-colors cursor-pointer group" onClick={() => onNotify(`Viewing details for ${ncar.id}`)}>
+              {filteredNCARs.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-8 py-20 text-center text-gray-400 font-black uppercase tracking-widest italic opacity-60">No NCARs matching criteria</td>
+                </tr>
+              ) : (
+                filteredNCARs.map(ncar => (
+                  <tr key={ncar.id} className="hover:bg-blue-50/20 transition-all group">
                     <td className="px-8 py-6">
-                      <span className="text-[11px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded uppercase tracking-tighter border border-blue-100">{ncar.id}</span>
+                      <span className="text-[12px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded uppercase tracking-tighter border border-blue-100">{ncar.id}</span>
                     </td>
                     <td className="px-8 py-6">
-                      <span className={`text-xs font-black px-3 py-1 rounded-full uppercase border ${
-                        ncar.findingType === 'Major' ? 'bg-red-50 text-red-600 border-red-100' :
-                        ncar.findingType === 'Minor' ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-blue-50 text-blue-600 border-blue-100'
+                      <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase border ${
+                        ncar.findingType === 'Major' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-blue-50 text-blue-600 border-blue-100'
                       }`}>
                         {ncar.findingType}
                       </span>
                     </td>
                     <td className="px-8 py-6">
-                      <p className="font-bold text-gray-900 text-base line-clamp-1">{ncar.requirement}</p>
-                      <p className="text-sm text-gray-400 font-medium italic mt-1 truncate max-w-[250px]">"{ncar.statement}"</p>
+                      <p className="font-bold text-gray-900 text-[12px] line-clamp-1">{ncar.requirement}</p>
                     </td>
-                    <td className="px-8 py-6">
-                      <div className="text-base font-bold text-gray-700">{ncar.area}</div>
-                      <div className="text-xs text-gray-400 font-bold uppercase tracking-tighter mt-0.5">Clause {ncar.standardClause}</div>
+                    <td className="px-8 py-6 text-center">
+                      <div className="text-[12px] font-black text-gray-900">{new Date(ncar.deadline).toLocaleDateString()}</div>
+                      <div className="text-[9px] font-black text-blue-500 uppercase mt-1">{getDaysRemaining(ncar.deadline)} days left</div>
                     </td>
-                    <td className="px-8 py-6">
-                      <div className="flex items-center gap-2.5 text-sm font-bold text-gray-600">
-                        <User size={16} className="text-gray-400" />
-                        {ncar.auditee}
-                      </div>
+                    <td className="px-8 py-6 text-center">
+                      <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase border ${
+                        ncar.status === NCARStatus.OPEN ? 'bg-orange-50 text-orange-600 border-orange-100' : 
+                        ncar.status === NCARStatus.ACTION_PLAN_SUBMITTED ? 'bg-blue-50 text-blue-600 border-blue-100' :
+                        ncar.status === NCARStatus.VALIDATED ? 'bg-green-50 text-blue-700 border-blue-200' :
+                        ncar.status === NCARStatus.CLOSED ? 'bg-green-50 text-green-600 border-green-100' : 
+                        ncar.status === NCARStatus.REOPENED || ncar.status === NCARStatus.REJECTED ? 'bg-red-50 text-red-600 border-red-100' : 'bg-gray-50 text-gray-500 border-gray-100'
+                      }`}>
+                        {ncar.status === NCARStatus.VALIDATED ? 'Approved' : (ncar.status === NCARStatus.REOPENED ? 'Rejected' : ncar.status)}
+                      </span>
                     </td>
-                    <td className="px-8 py-6">
-                      <div className="text-center">
-                        <div className="text-sm font-black text-gray-900">{new Date(ncar.deadline).toLocaleDateString()}</div>
-                        {ncar.status === NCARStatus.OPEN && (
-                          <div className={`text-[10px] font-black uppercase mt-1.5 ${daysLeft <= 1 ? 'text-red-500' : 'text-blue-500'}`}>
-                            {daysLeft} days left
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-8 py-6">
+                    <td className="px-8 py-6 text-center">
                       <div className="flex justify-center">
-                        <span className={`text-xs font-black px-4 py-1.5 rounded-full uppercase border ${
-                          ncar.status === NCARStatus.OPEN ? 'text-blue-600 bg-blue-50 border-blue-100' : 
-                          ncar.status === NCARStatus.CLOSED ? 'text-green-600 bg-green-50 border-green-100' : 'text-orange-600 bg-orange-50 border-orange-100'
-                        }`}>
-                          {ncar.status}
-                        </span>
+                        <button 
+                          onClick={() => handleAction(ncar)}
+                          className={`p-2 rounded-xl transition-all border ${
+                            isAuditee && (ncar.status === NCARStatus.REOPENED || ncar.status === NCARStatus.REJECTED)
+                            ? 'text-red-600 bg-red-50 border-red-100 hover:bg-red-100'
+                            : 'text-blue-600 bg-blue-50 border-blue-100 hover:bg-blue-100'
+                          }`}
+                          title={isAuditee ? (ncar.status === NCARStatus.REOPENED || ncar.status === NCARStatus.REJECTED ? "Revise Action Plan" : "View Finding") : "Edit Finding"}
+                        >
+                          {isAuditee ? (ncar.status === NCARStatus.REOPENED || ncar.status === NCARStatus.REJECTED ? <RefreshCcw size={20} /> : <Eye size={20} />) : <Edit3 size={20} />}
+                        </button>
                       </div>
                     </td>
                   </tr>
-                );
-              })}
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6 overflow-y-auto">
-          <div className="bg-white border border-gray-100 rounded-[3.5rem] w-full max-w-7xl shadow-2xl overflow-hidden max-h-[95vh] flex flex-col animate-in slide-in-from-bottom duration-500">
-            <form onSubmit={handleRaiseNCAR} className="flex flex-col h-full">
-              <div className="p-14 pb-8 flex justify-between items-center border-b border-gray-50">
-                <div className="flex items-center gap-10">
-                  <div className="bg-red-50 p-7 rounded-[2.5rem] text-red-600 shadow-sm">
-                    <AlertTriangle size={56} />
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 overflow-y-auto">
+          <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+            {!isCreatingActionPlan ? (
+              <form onSubmit={handleSubmit}>
+                <div className="p-6 flex justify-between items-center border-b border-gray-100">
+                  <div className="flex items-center gap-4">
+                    <div className="bg-blue-50 p-3 rounded-2xl text-blue-600 shadow-lg">
+                      {isAuditee ? (viewingNCAR?.status === NCARStatus.REOPENED || viewingNCAR?.status === NCARStatus.REJECTED ? <RefreshCcw size={24} /> : <Eye size={24} />) : viewingNCAR ? <Edit3 size={24} /> : <AlertTriangle size={24} />}
+                    </div>
+                    <div>
+                      <h4 className="text-2xl font-black text-gray-900 tracking-tight">
+                        {isAuditee ? (viewingNCAR?.status === NCARStatus.REOPENED || viewingNCAR?.status === NCARStatus.REJECTED ? 'Review & Plan' : 'View Finding Details') : viewingNCAR ? `Edit NCAR: ${viewingNCAR.id}` : 'Raise New NCAR'}
+                      </h4>
+                      <p className="text-sm text-gray-500 font-medium">Audit context and finding severity log.</p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="text-5xl font-black text-gray-900 tracking-tighter">Log Finding</h4>
-                    <p className="text-gray-500 text-xl font-medium mt-1">Define non-compliance and objective evidence.</p>
+                  <button type="button" onClick={closeForm} className="text-gray-400 hover:text-gray-900 bg-gray-50 p-2 rounded-full transition-all">
+                    <X size={24} />
+                  </button>
+                </div>
+                
+                <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                  {viewingNCAR?.rejectionRemarks && (
+                    <div className="md:col-span-2 bg-red-50 border-2 border-red-100 rounded-2xl p-6 flex items-start gap-5 shadow-sm">
+                      <div className="p-3 bg-red-100 rounded-xl text-red-600">
+                        <MessageSquare size={24} />
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-black text-red-400 uppercase tracking-widest block mb-1">Feedback from Lead Auditor</span>
+                        <p className="text-sm font-bold text-red-800 leading-relaxed italic">"{viewingNCAR.rejectionRemarks}"</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-6">
+                    <div>
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Finding Statement</label>
+                      <textarea 
+                        readOnly={isAuditee || (isLead && viewingNCAR?.status === NCARStatus.ACTION_PLAN_SUBMITTED)}
+                        required
+                        value={formData.statement}
+                        onChange={(e) => setFormData({...formData, statement: e.target.value})}
+                        className="w-full bg-gray-50 border-gray-200 border-2 rounded-xl p-4 text-sm font-bold min-h-[120px] outline-none focus:ring-4 focus:ring-blue-100 transition-all"
+                      ></textarea>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Objective Evidence</label>
+                      <textarea 
+                        readOnly={isAuditee || (isLead && viewingNCAR?.status === NCARStatus.ACTION_PLAN_SUBMITTED)}
+                        required
+                        value={formData.evidence}
+                        onChange={(e) => setFormData({...formData, evidence: e.target.value})}
+                        className="w-full bg-gray-50 border-gray-200 border-2 rounded-xl p-4 text-sm font-bold min-h-[120px] outline-none focus:ring-4 focus:ring-blue-100 transition-all"
+                      ></textarea>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Attachment</label>
+                      <div className="relative group">
+                        <input 
+                          type="file" 
+                          onChange={handleFileChange}
+                          className="hidden" 
+                          id="ncar-main-file-upload"
+                          disabled={isAuditee || (isLead && viewingNCAR?.status === NCARStatus.ACTION_PLAN_SUBMITTED)}
+                        />
+                        <label 
+                          htmlFor="ncar-main-file-upload"
+                          className={`flex items-center justify-center gap-3 w-full bg-blue-50/50 border-2 border-dashed border-blue-200 rounded-2xl p-6 transition-all ${isAuditee || (isLead && viewingNCAR?.status === NCARStatus.ACTION_PLAN_SUBMITTED) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer group-hover:bg-blue-100/50 group-hover:border-blue-400'}`}
+                        >
+                          <Paperclip size={20} className="text-blue-500" />
+                          <div className="text-left">
+                            <p className="text-sm font-black text-blue-900">{formData.attachmentName || 'Click to upload audit files'}</p>
+                            <p className="text-[10px] text-blue-400 font-bold uppercase tracking-widest mt-0.5">PDF, DOCX or ZIP up to 10MB</p>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Finding Type</label>
+                        <select 
+                          disabled={isAuditee || (isLead && viewingNCAR?.status === NCARStatus.ACTION_PLAN_SUBMITTED)}
+                          value={formData.type}
+                          onChange={(e) => setFormData({...formData, type: e.target.value as any})}
+                          className="w-full bg-gray-50 border-gray-200 border-2 rounded-xl p-3 text-sm font-bold outline-none focus:ring-4 focus:ring-blue-100 transition-all"
+                        >
+                          <option value="Major">Major</option>
+                          <option value="Minor">Minor</option>
+                          <option value="OFI">OFI</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Due Date</label>
+                          <div className="flex items-center gap-1 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-100 animate-in fade-in zoom-in duration-300">
+                             <Clock size={10} className="text-blue-500" />
+                             <span className="text-[9px] font-black text-blue-600 uppercase tracking-tighter">
+                                {getDaysRemaining(formData.dueDate)} Days Left
+                             </span>
+                          </div>
+                        </div>
+                        <input 
+                          readOnly={isAuditee || (isLead && viewingNCAR?.status === NCARStatus.ACTION_PLAN_SUBMITTED)}
+                          type="date" 
+                          value={formData.dueDate}
+                          onChange={(e) => setFormData({...formData, dueDate: e.target.value})}
+                          className="w-full bg-gray-50 border-gray-200 border-2 rounded-xl p-3 text-sm font-bold outline-none focus:ring-4 focus:ring-blue-100 transition-all"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Requirement Clause</label>
+                      <select 
+                        disabled={isAuditee || (isLead && viewingNCAR?.status === NCARStatus.ACTION_PLAN_SUBMITTED)}
+                        value={formData.clause}
+                        onChange={(e) => setFormData({...formData, clause: e.target.value})}
+                        className="w-full bg-gray-50 border-gray-200 border-2 rounded-xl p-3 text-sm font-bold outline-none focus:ring-4 focus:ring-blue-100 transition-all"
+                      >
+                        {REQUIREMENTS.map(r => <option key={r} value={r}>{r}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Responsible Area</label>
+                      <select 
+                        disabled={isAuditee || (isLead && viewingNCAR?.status === NCARStatus.ACTION_PLAN_SUBMITTED)}
+                        value={formData.area}
+                        onChange={(e) => setFormData({...formData, area: e.target.value})}
+                        className="w-full bg-gray-50 border-gray-200 border-2 rounded-xl p-3 text-sm font-bold outline-none focus:ring-4 focus:ring-blue-100 transition-all"
+                      >
+                        {FINDING_AREAS.map(a => <option key={a} value={a}>{a}</option>)}
+                      </select>
+                    </div>
                   </div>
                 </div>
-                <button type="button" onClick={() => setShowForm(false)} className="bg-gray-100 hover:bg-gray-200 p-5 rounded-full transition-all">
-                  <X size={40} className="text-gray-500" />
-                </button>
-              </div>
-              
-              <div className="p-14 pt-8 overflow-y-auto custom-scrollbar flex-1">
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
-                  <div className="lg:col-span-4 space-y-12">
-                    <section className="space-y-8">
-                      <h5 className="text-base font-black text-blue-600 uppercase tracking-[0.3em] mb-6 border-b pb-4 inline-block">Severity Classification</h5>
-                      <div className="grid grid-cols-1 gap-4">
-                        {(['Major', 'Minor', 'OFI'] as const).map(type => (
+
+                <div className="p-6 border-t border-gray-100 bg-gray-50/30 flex justify-between items-center">
+                  <div className="flex items-center gap-3">
+                    {viewingNCAR && viewingNCAR.status === NCARStatus.ACTION_PLAN_SUBMITTED && isLead && (
+                      <div className="bg-blue-100 text-blue-700 p-2 px-4 rounded-xl flex items-center gap-2 text-xs font-black uppercase tracking-tighter">
+                        <ShieldCheck size={14} /> Review Required
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex gap-4">
+                    <button type="button" onClick={closeForm} className="px-8 py-3 bg-white border-2 border-gray-200 rounded-2xl font-black text-gray-500 hover:bg-gray-50 transition-all text-sm tracking-widest uppercase">Close</button>
+                    {isLead && viewingNCAR?.status === NCARStatus.ACTION_PLAN_SUBMITTED ? (
+                      <>
+                        <button 
+                          type="button"
+                          onClick={handleInitiateReject}
+                          className="px-8 py-3 bg-white border-2 border-red-100 text-red-600 rounded-2xl font-black hover:bg-red-50 transition-all text-sm flex items-center gap-2 uppercase tracking-widest"
+                        >
+                          <XCircle size={18} /> Reject
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={handleApprove}
+                          className="px-10 py-3 bg-[#3b82f6] text-white rounded-2xl font-black shadow-xl shadow-blue-200 hover:bg-blue-600 flex items-center gap-2 text-sm uppercase tracking-widest"
+                        >
+                          <CheckCircle2 size={18} /> Approve
+                        </button>
+                      </>
+                    ) : !isAuditee ? (
+                      <button type="submit" className="px-10 py-3 bg-[#3b82f6] text-white rounded-2xl font-black shadow-xl shadow-blue-200 hover:bg-blue-600 flex items-center gap-2 text-sm uppercase tracking-widest">
+                        <Save size={18} /> {viewingNCAR ? 'Update NCAR' : 'Save NCAR'}
+                      </button>
+                    ) : (
+                      viewingNCAR && (viewingNCAR.status === NCARStatus.OPEN || viewingNCAR.status === NCARStatus.REJECTED || viewingNCAR.status === NCARStatus.REOPENED) && (
+                        <div className="flex gap-3">
+                          {(viewingNCAR.status === NCARStatus.REJECTED || viewingNCAR.status === NCARStatus.REOPENED) && (
+                            <button 
+                              type="button"
+                              onClick={initiateFreshPlan}
+                              className="px-8 py-3 bg-white border-2 border-blue-100 text-blue-600 rounded-2xl font-black hover:bg-blue-50 transition-all flex items-center gap-3 text-sm uppercase tracking-widest"
+                            >
+                              <PlusCircle size={18} /> Create New Plan
+                            </button>
+                          )}
                           <button 
-                            key={type} 
                             type="button"
-                            onClick={() => setFormData({...formData, type})}
-                            className={`py-6 px-8 rounded-[2rem] text-base font-black border transition-all text-left flex items-center justify-between ${
-                              formData.type === type 
-                              ? 'border-[#3b82f6] bg-blue-50 text-blue-600 ring-8 ring-blue-50' 
-                              : 'border-gray-100 bg-white text-gray-400 hover:border-blue-200 shadow-sm'
-                            }`}
+                            onClick={() => setIsCreatingActionPlan(true)}
+                            className="px-10 py-3 bg-[#3b82f6] text-white rounded-2xl font-black shadow-xl shadow-blue-200 hover:bg-blue-600 flex items-center gap-3 text-sm uppercase tracking-widest"
                           >
-                            {type} NC
-                            {formData.type === type && <CheckCircle2 size={24} />}
+                            {viewingNCAR.status === NCARStatus.OPEN ? 'Create Action Plan' : 'Edit Previous Plan'} <ArrowRight size={18} />
                           </button>
-                        ))}
-                      </div>
-                    </section>
-
-                    <section className="space-y-8">
-                      <h5 className="text-base font-black text-blue-600 uppercase tracking-[0.3em] mb-6 border-b pb-4 inline-block">Ownership & Area</h5>
-                      <div className="space-y-8">
-                        <div>
-                          <label className="text-base font-black text-gray-900 uppercase block mb-4 tracking-widest">Process Owner</label>
-                          <select 
-                            value={formData.auditee}
-                            onChange={(e) => setFormData({...formData, auditee: e.target.value})}
-                            className="w-full bg-gray-50 border-gray-200 border-2 rounded-[1.5rem] p-6 focus:ring-4 focus:ring-blue-50 focus:border-blue-500 transition-all outline-none font-bold text-lg"
-                          >
-                            <option>Bob Johnson (Finance)</option>
-                            <option>Charlie Davis (Operations)</option>
-                          </select>
                         </div>
-                        <div>
-                          <label className="text-base font-black text-gray-900 uppercase block mb-4 tracking-widest">Finding Area</label>
+                      )
+                    )}
+                  </div>
+                </div>
+              </form>
+            ) : (
+              <form onSubmit={handleApSubmit}>
+                <div className="p-6 flex justify-between items-center border-b border-gray-100">
+                  <div className="flex items-center gap-4">
+                    <div className="bg-[#3b82f6] p-3 rounded-2xl text-white shadow-lg shadow-blue-200">
+                      <Edit3 size={24} />
+                    </div>
+                    <div>
+                      <h4 className="text-2xl font-black text-gray-900 tracking-tight">
+                        {viewingNCAR?.rejectionRemarks ? 'Action Plan Revision' : 'Create Action Plan'}
+                      </h4>
+                      <p className="text-sm text-gray-500 font-medium">Ref: {viewingNCAR?.id}</p>
+                    </div>
+                  </div>
+                  <button type="button" onClick={() => setIsCreatingActionPlan(false)} className="text-gray-400 hover:text-gray-900 bg-gray-50 p-2 rounded-full transition-all">
+                    <X size={24} />
+                  </button>
+                </div>
+                
+                <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                  {viewingNCAR?.rejectionRemarks && (
+                    <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-4 mb-4 shadow-sm">
+                      <MessageSquare className="text-red-600 mt-1 flex-shrink-0" size={20} />
+                      <div>
+                        <span className="text-[10px] font-black text-red-600 uppercase tracking-widest block mb-1">Lead Auditor Rejection Feedback</span>
+                        <p className="text-sm font-bold text-red-800 italic leading-relaxed">"{viewingNCAR.rejectionRemarks}"</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="bg-blue-50/50 rounded-2xl p-4 border border-blue-100">
+                    <div className="flex items-center gap-2 text-blue-600 mb-2 font-black text-xs uppercase tracking-widest">
+                      <AlertCircle size={16} /> Non-Conformance Statement
+                    </div>
+                    <p className="text-sm text-gray-700 font-bold leading-relaxed italic">"{viewingNCAR?.statement}"</p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="space-y-6">
+                      <div>
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Immediate Correction</label>
+                        <textarea 
+                          required
+                          value={apFormData.correction}
+                          onChange={(e) => setApFormData({...apFormData, correction: e.target.value})}
+                          placeholder="What steps were taken immediately to contain this?" 
+                          className="w-full bg-gray-50 border-gray-200 border-2 rounded-xl p-4 text-sm font-bold min-h-[100px] outline-none transition-all focus:ring-4 focus:ring-blue-100 focus:border-blue-500"
+                        ></textarea>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Root Cause Analysis (RCA)</label>
+                        <textarea 
+                          required
+                          value={apFormData.rootCause}
+                          onChange={(e) => setApFormData({...apFormData, rootCause: e.target.value})}
+                          placeholder="Why did this happen? Identify systemic failures..." 
+                          className="w-full bg-gray-50 border-gray-200 border-2 rounded-xl p-4 text-sm font-bold min-h-[120px] outline-none transition-all focus:ring-4 focus:ring-blue-100 focus:border-blue-500"
+                        ></textarea>
+                      </div>
+                    </div>
+
+                    <div className="space-y-6">
+                      <div>
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Long-term Corrective Action</label>
+                        <textarea 
+                          required
+                          value={apFormData.actionPlan}
+                          onChange={(e) => setApFormData({...apFormData, actionPlan: e.target.value})}
+                          placeholder="How will we prevent recurrence? Detail the strategy..." 
+                          className="w-full bg-gray-50 border-gray-200 border-2 rounded-xl p-4 text-sm font-bold min-h-[100px] outline-none transition-all focus:ring-4 focus:ring-blue-100 focus:border-blue-500"
+                        ></textarea>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Assignee</label>
                           <input 
                             required
                             type="text" 
-                            value={formData.area}
-                            onChange={(e) => setFormData({...formData, area: e.target.value})}
-                            placeholder="e.g. Server Infrastructure" 
-                            className="w-full bg-gray-50 border-gray-200 border-2 rounded-[1.5rem] p-6 focus:ring-4 focus:ring-blue-50 focus:border-blue-500 transition-all outline-none font-bold text-lg" 
+                            value={apFormData.responsible}
+                            onChange={(e) => setApFormData({...apFormData, responsible: e.target.value})}
+                            className="w-full bg-gray-50 border-gray-200 border-2 rounded-xl p-3 text-sm font-bold outline-none transition-all focus:ring-4 focus:ring-blue-100 focus:border-blue-500" 
                           />
                         </div>
-                      </div>
-                    </section>
-                  </div>
-
-                  <div className="lg:col-span-8 space-y-12">
-                    <section className="space-y-10">
-                      <h5 className="text-base font-black text-blue-600 uppercase tracking-[0.3em] mb-6 border-b pb-4 inline-block">Requirement & Evidence</h5>
-                      <div className="space-y-10">
-                        <div>
-                          <label className="text-base font-black text-gray-900 uppercase block mb-4 tracking-widest">Requirement (Standard / Clause)</label>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Target Date</label>
+                            <div className="flex items-center gap-1 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-100 animate-in fade-in zoom-in duration-300">
+                               <Clock size={10} className="text-blue-500" />
+                               <span className="text-[9px] font-black text-blue-600 uppercase tracking-tighter">
+                                  {getDaysRemaining(apFormData.dueDate)} Days
+                               </span>
+                            </div>
+                          </div>
                           <input 
                             required
-                            type="text" 
-                            value={formData.clause}
-                            onChange={(e) => setFormData({...formData, clause: e.target.value})}
-                            placeholder="e.g. ISO 27001 Clause 8.1" 
-                            className="w-full bg-gray-50 border-gray-200 border-2 rounded-[1.5rem] p-8 focus:ring-4 focus:ring-blue-50 focus:border-blue-500 transition-all outline-none font-black text-gray-900 text-2xl" 
+                            type="date" 
+                            value={apFormData.dueDate}
+                            onChange={(e) => setApFormData({...apFormData, dueDate: e.target.value})}
+                            className="w-full bg-gray-50 border-gray-200 border-2 rounded-xl p-3 text-sm font-bold outline-none transition-all focus:ring-4 focus:ring-blue-100 focus:border-blue-500" 
                           />
                         </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                          <div>
-                            <label className="text-base font-black text-gray-900 uppercase block mb-4 tracking-widest">Statement of Non-Conformance</label>
-                            <textarea 
-                              required
-                              rows={10} 
-                              value={formData.statement}
-                              onChange={(e) => setFormData({...formData, statement: e.target.value})}
-                              placeholder="Describe the gap clearly..." 
-                              className="w-full bg-gray-50 border-gray-200 border-2 rounded-[2rem] p-8 focus:ring-4 focus:ring-blue-50 focus:border-blue-500 transition-all outline-none resize-none text-lg font-bold leading-relaxed shadow-sm"
-                            ></textarea>
-                          </div>
-                          <div>
-                            <label className="text-base font-black text-gray-900 uppercase block mb-4 tracking-widest">Observed Objective Evidence</label>
-                            <textarea 
-                              required
-                              rows={10} 
-                              value={formData.evidence}
-                              onChange={(e) => setFormData({...formData, evidence: e.target.value})}
-                              placeholder="Document physical artifacts or interview notes..." 
-                              className="w-full bg-gray-50 border-gray-200 border-2 rounded-[2rem] p-8 focus:ring-4 focus:ring-blue-50 focus:border-blue-500 transition-all outline-none resize-none text-lg font-bold leading-relaxed shadow-sm"
-                            ></textarea>
-                          </div>
-                        </div>
                       </div>
-                    </section>
+                      
+                      <div className="pt-2">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Implementation Evidence Artifacts</label>
+                        <input 
+                          type="file" 
+                          onChange={handleApFileChange}
+                          className="hidden" 
+                          id="ncar-ap-file-upload"
+                        />
+                        <label 
+                          htmlFor="ncar-ap-file-upload"
+                          className="flex items-center gap-3 bg-blue-50/50 border-2 border-dashed border-blue-200 rounded-xl p-3.5 px-5 cursor-pointer hover:bg-blue-100/50 hover:border-blue-400 transition-all shadow-sm"
+                        >
+                          <FileUp size={20} className="text-blue-500" />
+                          <div className="text-left overflow-hidden">
+                            <p className="text-[11px] font-black text-blue-900 uppercase tracking-widest leading-none truncate">
+                              {apFormData.attachmentName || 'Select evidence files'}
+                            </p>
+                            <p className="text-[9px] text-blue-400 font-bold uppercase tracking-[0.1em] mt-1.5">
+                              Upload Proof of Implementation
+                            </p>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
                   </div>
+                </div>
+
+                <div className="p-6 border-t border-gray-100 bg-gray-50/30 flex justify-between items-center">
+                  <button 
+                    type="button"
+                    onClick={() => setApFormData(initialApFormData)}
+                    className="flex items-center gap-2 px-6 py-3 bg-white border-2 border-gray-100 text-gray-400 rounded-2xl font-black text-xs uppercase tracking-widest hover:text-red-500 hover:bg-red-50 hover:border-red-100 transition-all"
+                  >
+                    <Eraser size={18} /> Reset Form
+                  </button>
+                  <div className="flex gap-4">
+                    <button 
+                      type="button" 
+                      onClick={() => setIsCreatingActionPlan(false)} 
+                      className="px-8 py-3 bg-white border-2 border-gray-200 rounded-2xl font-black text-gray-500 hover:bg-gray-50 transition-all text-sm tracking-widest uppercase"
+                    >
+                      Back
+                    </button>
+                    <button 
+                      type="submit" 
+                      className="px-10 py-3 bg-[#3b82f6] text-white rounded-2xl font-black shadow-xl shadow-blue-200 hover:bg-blue-600 flex items-center gap-3 text-sm tracking-widest uppercase"
+                    >
+                      <Send size={18} /> Submit for Review
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {showRejectModal && (
+        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-red-50">
+            <div className="p-8 space-y-6">
+              <div className="flex items-center gap-4 text-red-600">
+                <div className="p-3 bg-red-50 rounded-2xl">
+                  <AlertTriangle size={32} />
+                </div>
+                <div>
+                  <h4 className="text-xl font-black tracking-tight uppercase">Rejection Remarks</h4>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Ref: {viewingNCAR?.id}</p>
                 </div>
               </div>
 
-              <div className="p-14 pt-8 flex gap-8 border-t border-gray-50 bg-gray-50/50">
-                <button type="button" onClick={() => setShowForm(false)} className="flex-1 px-12 py-8 bg-white border-2 border-gray-200 rounded-[2.5rem] font-black text-gray-500 hover:bg-gray-50 transition-all text-2xl">Discard Finding</button>
-                <button type="submit" className="flex-[2] px-12 py-8 bg-[#3b82f6] text-white rounded-[2.5rem] font-black hover:bg-blue-600 shadow-2xl shadow-blue-200 transition-all flex items-center justify-center gap-6 text-2xl">
-                  <CheckCircle2 size={40} />
-                  Raise NCAR
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                  <MessageSquare size={14} /> 
+                  Provide reason for rejection (Required)
+                </label>
+                <textarea 
+                  autoFocus
+                  required
+                  value={rejectionRemarks}
+                  onChange={(e) => setRejectionRemarks(e.target.value)}
+                  placeholder="Explain why this action plan is not acceptable..."
+                  className="w-full bg-red-50/20 border-2 border-red-50 rounded-2xl p-5 text-sm font-bold text-gray-700 outline-none focus:ring-4 focus:ring-red-100 focus:border-red-200 transition-all min-h-[120px] resize-none"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button 
+                  onClick={() => { setShowRejectModal(false); setRejectionRemarks(''); }}
+                  className="flex-1 px-6 py-4 bg-gray-50 text-gray-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-gray-100 transition-all border border-gray-100"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={finalizeRejection}
+                  disabled={!rejectionRemarks.trim()}
+                  className="flex-[1.5] px-6 py-4 bg-red-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-red-700 transition-all shadow-xl shadow-red-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <AlertCircle size={18} /> Confirm Rejection
                 </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}

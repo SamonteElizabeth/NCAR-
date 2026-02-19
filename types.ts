@@ -2,9 +2,10 @@
 export type Role = 'LEAD_AUDITOR' | 'AUDITOR' | 'AUDITEE';
 
 export enum AuditStatus {
+  DRAFT = 'Draft',
   PLANNED = 'Planned',
   ACTUAL = 'Actual Audit',
-  COMPLETED = 'Completed'
+  CLOSED = 'Closed'
 }
 
 export enum NCARStatus {
@@ -42,6 +43,8 @@ export interface NCAR {
   createdAt: string;
   status: NCARStatus;
   deadline: string; // 5 working days from creation
+  attachmentName?: string;
+  rejectionRemarks?: string;
 }
 
 export interface ActionPlan {

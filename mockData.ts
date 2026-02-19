@@ -30,6 +30,17 @@ export const INITIAL_AUDIT_PLANS: AuditPlan[] = [
     status: AuditStatus.ACTUAL,
     isLocked: true,
     createdAt: new Date().toISOString()
+  },
+  {
+    id: 'AP_000003_202311',
+    startDate: '2023-11-10',
+    endDate: '2023-11-12',
+    auditors: ['John Doe'],
+    auditees: ['Alice Smith'],
+    attachmentName: 'it_asset_management_scope.pdf',
+    status: AuditStatus.CLOSED,
+    isLocked: true,
+    createdAt: new Date().toISOString()
   }
 ];
 
@@ -63,6 +74,22 @@ export const INITIAL_NCARS: NCAR[] = [
     createdAt: '2023-10-02T14:30:00Z',
     status: NCARStatus.ACTION_PLAN_SUBMITTED,
     deadline: '2023-10-09T14:30:00Z'
+  },
+  {
+    id: 'NCAR_000003_202311',
+    auditPlanId: 'AP_000003_202311',
+    statement: 'The IT asset register was not updated for the last 6 months.',
+    requirement: 'ISO 27001 Clause 8.1',
+    evidence: 'Review of register logs vs. recent procurement invoices.',
+    findingType: 'Major',
+    standardClause: '8.1',
+    area: 'IT Infrastructure',
+    auditor: 'John Doe',
+    auditee: 'Alice Smith',
+    createdAt: '2023-11-11T11:00:00Z',
+    status: NCARStatus.REOPENED,
+    deadline: '2023-11-18T11:00:00Z',
+    rejectionRemarks: 'The proposed corrective action only addresses the backlog but does not identify the root cause of why the updates were missed initially. Please revise the RCA and the long-term prevention strategy.'
   }
 ];
 
@@ -76,5 +103,16 @@ export const INITIAL_ACTION_PLANS: ActionPlan[] = [
     correctiveAction: 'Implement mandatory attachment validation in the ERP expense module and conduct refresher training.',
     dueDate: '2023-11-15',
     submittedAt: '2023-10-04T09:00:00Z'
+  },
+  {
+    id: 'ACT_000002_202311',
+    ncarId: 'NCAR_000003_202311',
+    immediateCorrection: 'Current asset register has been updated with all missing entries from the last 6 months.',
+    responsiblePerson: 'Alice Smith',
+    rootCause: 'Staff turnover in the IT department.',
+    correctiveAction: 'Hire more staff to ensure the register is kept up to date.',
+    dueDate: '2023-12-01',
+    submittedAt: '2023-11-14T15:00:00Z',
+    remarks: 'it_asset_backlog_fix.xlsx'
   }
 ];
