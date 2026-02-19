@@ -1,5 +1,5 @@
 {
-  "name": "NCARTool",
-  "description": "A high-fidelity internal audit management system with modules for Audit Planning, NCARs, Action Plans, and robust analytics, designed with a professional blue-themed UI.",
+  "name": "NCARTool v2.0",
+  "description": "Professional internal audit management system with real-time analytics, lifecycle tracking, and role-based access control.",
   "requestFramePermissions": []
 }
