@@ -63,25 +63,36 @@ const App: React.FC = () => {
 
   const navItems = [
     { id: 'dashboard', label: 'Analytics Dashboard', icon: LayoutDashboard, roles: ['LEAD_AUDITOR', 'AUDITOR', 'AUDITEE'] },
-    { id: 'planning', label: 'Audit Planning', icon: ClipboardList, roles: ['LEAD_AUDITOR', 'AUDITOR', 'AUDITEE'] },
+    // AUDITEE removed from roles for planning module
+    { id: 'planning', label: 'Audit Planning', icon: ClipboardList, roles: ['LEAD_AUDITOR', 'AUDITOR'] },
     { id: 'ncar', label: 'NCAR Module', icon: AlertCircle, roles: ['LEAD_AUDITOR', 'AUDITOR', 'AUDITEE'] },
     { id: 'actions', label: 'Action Plans', icon: CheckSquare, roles: ['LEAD_AUDITOR', 'AUDITOR', 'AUDITEE'] },
     { id: 'validation', label: 'Validation & Closure', icon: ShieldCheck, roles: ['LEAD_AUDITOR', 'AUDITOR', 'AUDITEE'] },
   ];
+
+  // Access Guard: If user switches role to one that doesn't have access to current module, redirect to dashboard
+  useEffect(() => {
+    const currentItem = navItems.find(item => item.id === activeModule);
+    if (currentItem && !currentItem.roles.includes(currentRole)) {
+      setActiveModule('dashboard');
+    }
+  }, [currentRole, activeModule]);
 
   const filteredNavItems = navItems.filter(item => item.roles.includes(currentRole));
 
   const renderModule = () => {
     switch (activeModule) {
       case 'dashboard': return <Dashboard ncars={ncars} auditPlans={auditPlans} />;
-      case 'planning': return (
-        <AuditPlanning 
-          plans={auditPlans} 
-          setPlans={setAuditPlans} 
-          role={currentRole} 
-          onNotify={notify}
-        />
-      );
+      case 'planning': 
+        if (currentRole === 'AUDITEE') return <Dashboard ncars={ncars} auditPlans={auditPlans} />;
+        return (
+          <AuditPlanning 
+            plans={auditPlans} 
+            setPlans={setAuditPlans} 
+            role={currentRole} 
+            onNotify={notify}
+          />
+        );
       case 'ncar': return (
         <NCARModule 
           ncars={ncars} 
