@@ -201,7 +201,6 @@ const ValidationModule: React.FC<ValidationModuleProps> = ({ ncars, actionPlans,
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div>
           <h3 className="text-4xl font-black text-gray-900 tracking-tight">Validation & Closure</h3>
-          <p className="text-lg text-gray-500 font-medium mt-1">Review evidence and finalize audit findings.</p>
         </div>
         <div className="bg-blue-50 px-8 py-4 rounded-2xl border border-blue-100 flex items-center gap-4">
           <div className="w-4 h-4 bg-[#3b82f6] rounded-full animate-pulse"></div>

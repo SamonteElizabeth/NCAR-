@@ -20,7 +20,10 @@ import {
   Briefcase,
   Search as SearchIcon,
   BarChart3,
-  Check
+  Check,
+  FileText,
+  UserPlus,
+  LogOut
 } from 'lucide-react';
 import { 
   Role, 
@@ -29,16 +32,22 @@ import {
   ActionPlan, 
   AuditStatus, 
   NCARStatus,
-  Notification
+  Notification,
+  User
 } from './types';
-import { INITIAL_AUDIT_PLANS, INITIAL_NCARS, INITIAL_ACTION_PLANS, USERS } from './mockData';
-import Dashboard from './views/Dashboard';
+import { INITIAL_AUDIT_PLANS, INITIAL_NCARS, INITIAL_ACTION_PLANS, INITIAL_USERS } from './mockData';
 import AuditPlanning from './views/AuditPlanning';
 import NCARModule from './views/NCARModule';
 import ActionPlanModule from './views/ActionPlanModule';
 import ValidationModule from './views/ValidationModule';
+import UserManualModule from './views/UserManualModule';
+import UserManagement from './views/UserManagement';
+import AnalyticsModule from './views/AnalyticsModule';
+import Login from './views/Login';
 
 const App: React.FC = () => {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [activeModule, setActiveModule] = useState<string>('dashboard');
   const [currentRole, setCurrentRole] = useState<Role>('LEAD_AUDITOR');
   const [auditPlans, setAuditPlans] = useState<AuditPlan[]>(INITIAL_AUDIT_PLANS);
@@ -49,6 +58,8 @@ const App: React.FC = () => {
     { id: '2', message: 'NCAR Deadline Approaching: NC-2023-001', type: 'warning', timestamp: '1 hour ago' }
   ]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [userManualFile, setUserManualFile] = useState<{ name: string, url: string, uploadedAt: string } | null>(null);
+  const [users, setUsers] = useState<User[]>(INITIAL_USERS);
 
   // Helper to add toast notifications
   const notify = (message: string, type: 'info' | 'success' | 'warning' = 'info') => {
@@ -61,6 +72,29 @@ const App: React.FC = () => {
     setNotifications(prev => [newNotif, ...prev]);
   };
 
+  const handleLogin = (role: Role) => {
+    // Find a user from mock data that matches the role, or default to a generic one
+    const user = INITIAL_USERS.find(u => u.role === role) || {
+      id: '999',
+      name: 'Alex Johnson',
+      role: role,
+      dept: 'DISD',
+      email: 'alex.johnson@example.com',
+      designation: role === 'AUDITEE' ? 'Manager' : 'Staff'
+    };
+    
+    setCurrentUser(user);
+    setCurrentRole(role);
+    setIsLoggedIn(true);
+    notify(`Successfully logged in as ${user.name}`, 'success');
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    setCurrentUser(null);
+    notify('Logged out successfully', 'info');
+  };
+
   const navItems = [
     { id: 'dashboard', label: 'Analytics Dashboard', icon: LayoutDashboard, roles: ['LEAD_AUDITOR', 'AUDITOR', 'AUDITEE'] },
     // AUDITEE removed from roles for planning module
@@ -68,6 +102,8 @@ const App: React.FC = () => {
     { id: 'ncar', label: 'NCAR Module', icon: AlertCircle, roles: ['LEAD_AUDITOR', 'AUDITOR', 'AUDITEE'] },
     { id: 'actions', label: 'Action Plans', icon: CheckSquare, roles: ['LEAD_AUDITOR', 'AUDITOR', 'AUDITEE'] },
     { id: 'validation', label: 'Validation & Closure', icon: ShieldCheck, roles: ['LEAD_AUDITOR', 'AUDITOR', 'AUDITEE'] },
+    { id: 'manual', label: 'User Manual', icon: FileText, roles: ['LEAD_AUDITOR', 'AUDITOR', 'AUDITEE', 'DEV_ADMIN'] },
+    { id: 'users', label: 'User Management', icon: UserPlus, roles: ['DEV_ADMIN'] },
   ];
 
   // Access Guard: If user switches role to one that doesn't have access to current module, redirect to dashboard
@@ -82,9 +118,9 @@ const App: React.FC = () => {
 
   const renderModule = () => {
     switch (activeModule) {
-      case 'dashboard': return <Dashboard ncars={ncars} auditPlans={auditPlans} />;
+      case 'dashboard': return <AnalyticsModule ncars={ncars} actionPlans={actionPlans} users={users} onNotify={notify} />;
       case 'planning': 
-        if (currentRole === 'AUDITEE') return <Dashboard ncars={ncars} auditPlans={auditPlans} />;
+        if (currentRole === 'AUDITEE') return <AnalyticsModule ncars={ncars} actionPlans={actionPlans} users={users} onNotify={notify} />;
         return (
           <AuditPlanning 
             plans={auditPlans} 
@@ -123,7 +159,22 @@ const App: React.FC = () => {
           onNotify={notify}
         />
       );
-      default: return <Dashboard ncars={ncars} auditPlans={auditPlans} />;
+      case 'manual': return (
+        <UserManualModule 
+          role={currentRole}
+          userManualFile={userManualFile}
+          setUserManualFile={setUserManualFile}
+          onNotify={notify}
+        />
+      );
+      case 'users': return (
+        <UserManagement 
+          users={users}
+          setUsers={setUsers}
+          onNotify={notify}
+        />
+      );
+      default: return <AnalyticsModule ncars={ncars} actionPlans={actionPlans} users={users} onNotify={notify} />;
     }
   };
 
@@ -152,6 +203,10 @@ const App: React.FC = () => {
       )}
     </div>
   );
+
+  if (!isLoggedIn) {
+    return <Login onLogin={handleLogin} />;
+  }
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden text-base">
@@ -183,41 +238,26 @@ const App: React.FC = () => {
             </button>
           ))}
         </nav>
-
-        <div className="p-6 border-t border-white/10 bg-black/5">
-          <div className={`flex items-center gap-4 ${!isSidebarOpen && 'justify-center'}`}>
-            <UserCircle size={32} className="text-blue-50" />
-            {isSidebarOpen && (
-              <div className="flex-1 min-w-0">
-                <p className="text-base font-black text-white truncate">Demo User</p>
-                <p className="text-xs font-black text-blue-100 uppercase truncate tracking-widest">{currentRole.replace('_', ' ')}</p>
-              </div>
-            )}
-          </div>
-          {isSidebarOpen && (
-            <div className="mt-6 space-y-3">
-              <label className="text-[10px] font-black text-blue-50 uppercase tracking-[0.2em] block">Switch Role Access</label>
-              <select 
-                value={currentRole} 
-                onChange={(e) => setCurrentRole(e.target.value as Role)}
-                className="w-full text-sm bg-white/10 border-none text-white rounded-xl p-3.5 focus:ring-2 focus:ring-white font-bold appearance-none cursor-pointer shadow-lg hover:bg-white/20 transition-all"
-              >
-                <option value="LEAD_AUDITOR" className="text-gray-900">Lead Auditor</option>
-                <option value="AUDITOR" className="text-gray-900">Auditor</option>
-                <option value="AUDITEE" className="text-gray-900">Auditee</option>
-              </select>
-            </div>
-          )}
-        </div>
       </aside>
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-full overflow-hidden">
         {/* Topbar */}
         <header className="h-20 bg-white border-b border-gray-200 px-8 flex items-center justify-between z-20 sticky top-0">
-          <h2 className="text-2xl font-black text-gray-800 uppercase tracking-tight">{activeModule.replace('-', ' ')}</h2>
+          <h2 className="text-2xl font-black text-gray-800 uppercase tracking-tight">
+            {navItems.find(item => item.id === activeModule)?.label || activeModule.replace('-', ' ')}
+          </h2>
           
           <div className="flex items-center gap-6">
+            <div className="relative group hidden md:block">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <input 
+                type="text" 
+                placeholder="Search everything..." 
+                className="pl-12 pr-6 py-2.5 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-medium w-64 focus:w-80 transition-all focus:ring-2 focus:ring-blue-100 outline-none"
+              />
+            </div>
+
             <div className="relative group">
               <button className="p-2.5 text-gray-400 hover:bg-gray-100 rounded-full transition-colors relative">
                 <Bell size={24} />
@@ -247,6 +287,34 @@ const App: React.FC = () => {
                 </div>
                 <div className="p-4 text-center bg-gray-50/50 rounded-b-2xl border-t border-gray-50">
                   <button className="text-sm font-black text-[#3b82f6] hover:text-blue-800 uppercase tracking-widest">Mark All as Read</button>
+                </div>
+              </div>
+            </div>
+
+            {/* User Profile */}
+            <div className="relative group">
+              <button className="flex items-center gap-4 hover:bg-gray-50 p-2 rounded-2xl transition-all">
+                <div className="flex flex-col items-end">
+                  <span className="text-sm font-black text-gray-900 leading-tight">{currentUser?.name || 'Alex Johnson'}</span>
+                  <span className="text-xs font-bold text-blue-600 capitalize">
+                    {currentRole.toLowerCase().replace('_', ' ')}
+                  </span>
+                </div>
+                <div className="w-10 h-10 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
+                  <UserCircle size={24} />
+                </div>
+              </button>
+              
+              {/* Profile Dropdown */}
+              <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-100 rounded-2xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 transform origin-top-right scale-95 group-hover:scale-100">
+                <div className="p-2">
+                  <button 
+                    onClick={handleLogout}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+                  >
+                    <LogOut size={18} />
+                    Logout
+                  </button>
                 </div>
               </div>
             </div>

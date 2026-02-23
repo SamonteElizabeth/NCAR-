@@ -40,8 +40,7 @@ interface NCARModuleProps {
 }
 
 const FINDING_AREAS = [
-  'Finance', 'Operations', 'IT Infrastructure', 'Human Resources', 
-  'Supply Chain', 'Customer Support', 'Quality Assurance', 'Legal & Compliance'
+  'DISD', 'TSD', 'TASS', 'IA', 'MSP', 'CSS', 'DCFI', 'BTSG', 'EEM'
 ];
 
 const REQUIREMENTS = [
@@ -91,7 +90,9 @@ const NCARModule: React.FC<NCARModuleProps> = ({
     evidence: '',
     auditee: 'Bob Johnson',
     attachmentName: '',
-    dueDate: getInitialDueDate()
+    dueDate: getInitialDueDate(),
+    auditType: 'Quality/InfoSec' as NCAR['auditType'],
+    processName: ''
   };
 
   const [formData, setFormData] = useState(initialFormData);
@@ -136,7 +137,9 @@ const NCARModule: React.FC<NCARModuleProps> = ({
       evidence: ncar.evidence,
       auditee: ncar.auditee,
       attachmentName: ncar.attachmentName || '',
-      dueDate: ncar.deadline.split('T')[0]
+      dueDate: ncar.deadline.split('T')[0],
+      auditType: ncar.auditType,
+      processName: ncar.processName
     });
 
     const existingAp = actionPlans.find(ap => ap.ncarId === ncar.id);
@@ -203,7 +206,9 @@ const NCARModule: React.FC<NCARModuleProps> = ({
         area: formData.area,
         auditee: formData.auditee,
         attachmentName: formData.attachmentName,
-        deadline: formData.dueDate
+        deadline: formData.dueDate,
+        auditType: formData.auditType,
+        processName: formData.processName
       } : n));
       onNotify(`NCAR ${viewingNCAR.id} updated.`, 'success');
     } else {
@@ -222,7 +227,10 @@ const NCARModule: React.FC<NCARModuleProps> = ({
         createdAt: now.toISOString(),
         status: NCARStatus.OPEN,
         deadline: formData.dueDate,
-        attachmentName: formData.attachmentName
+        attachmentName: formData.attachmentName,
+        auditType: formData.auditType,
+        processName: formData.processName,
+        isEscalated: false
       };
       setNcars(prev => [newNCAR, ...prev]);
       onNotify('NCAR raised and assigned.', 'success');
@@ -303,7 +311,6 @@ const NCARModule: React.FC<NCARModuleProps> = ({
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
         <div>
           <h3 className="text-3xl font-black text-gray-900 tracking-tight">Non-Conformance Reports</h3>
-          <p className="text-lg text-gray-500 font-medium">Log findings and track departmental compliance.</p>
         </div>
         {canCreate && (
           <button 
@@ -517,6 +524,32 @@ const NCARModule: React.FC<NCARModuleProps> = ({
                   </div>
 
                   <div className="space-y-6">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Audit Type</label>
+                        <select 
+                          disabled={isAuditee || (isLead && viewingNCAR?.status === NCARStatus.ACTION_PLAN_SUBMITTED)}
+                          value={formData.auditType}
+                          onChange={(e) => setFormData({...formData, auditType: e.target.value as any})}
+                          className="w-full bg-gray-50 border-gray-200 border-2 rounded-xl p-3 text-sm font-bold outline-none focus:ring-4 focus:ring-blue-100 transition-all"
+                        >
+                          <option value="Quality/InfoSec">Quality/InfoSec</option>
+                          <option value="Financial">Financial</option>
+                          <option value="Special Request">Special Request</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Process Name</label>
+                        <input 
+                          readOnly={isAuditee || (isLead && viewingNCAR?.status === NCARStatus.ACTION_PLAN_SUBMITTED)}
+                          type="text" 
+                          value={formData.processName}
+                          onChange={(e) => setFormData({...formData, processName: e.target.value})}
+                          placeholder="e.g. Access Control"
+                          className="w-full bg-gray-50 border-gray-200 border-2 rounded-xl p-3 text-sm font-bold outline-none focus:ring-4 focus:ring-blue-100 transition-all"
+                        />
+                      </div>
+                    </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Finding Type</label>

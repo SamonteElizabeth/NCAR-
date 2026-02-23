@@ -1,5 +1,9 @@
 
-export type Role = 'LEAD_AUDITOR' | 'AUDITOR' | 'AUDITEE';
+export type Role = 'LEAD_AUDITOR' | 'AUDITOR' | 'AUDITEE' | 'DEV_ADMIN';
+
+export type AuditType = 'Quality/InfoSec' | 'Financial' | 'Special Request';
+
+export type Designation = 'Manager' | 'Assistant Manager' | 'Supervisor' | 'Department Head' | 'Staff';
 
 export enum AuditStatus {
   DRAFT = 'Draft',
@@ -27,6 +31,8 @@ export interface AuditPlan {
   status: AuditStatus;
   isLocked: boolean;
   createdAt: string;
+  auditType: AuditType;
+  processName: string;
 }
 
 export interface NCAR {
@@ -37,14 +43,19 @@ export interface NCAR {
   evidence: string;
   findingType: 'Major' | 'Minor' | 'OFI';
   standardClause: string;
+  clauseNumber?: string; // Required for QIS
   area: string;
   auditor: string;
   auditee: string;
   createdAt: string;
   status: NCARStatus;
-  deadline: string; // 5 working days from creation
+  deadline: string;
   attachmentName?: string;
   rejectionRemarks?: string;
+  auditType: AuditType;
+  processName: string;
+  isEscalated: boolean;
+  responseAt?: string; // When the action plan was first submitted
 }
 
 export interface ActionPlan {
@@ -56,6 +67,7 @@ export interface ActionPlan {
   correctiveAction: string;
   dueDate: string;
   submittedAt: string;
+  completedAt?: string; // For tracking implementation timeliness
   remarks?: string;
 }
 
@@ -64,4 +76,14 @@ export interface Notification {
   message: string;
   type: 'info' | 'success' | 'warning';
   timestamp: string;
+}
+
+export interface User {
+  id: string;
+  name: string;
+  role: Role;
+  dept: string;
+  email: string;
+  designation: Designation;
+  reportsTo?: string; // User ID of superior
 }

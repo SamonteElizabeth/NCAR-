@@ -197,7 +197,6 @@ const ActionPlanModule: React.FC<ActionPlanModuleProps> = ({ ncars, actionPlans,
     <div className="space-y-6 text-base relative">
       <div>
         <h3 className="text-3xl font-black text-gray-900 tracking-tight">Action Plans</h3>
-        <p className="text-lg text-gray-500 font-medium mt-1">Address non-conformances with corrective strategies.</p>
       </div>
 
       <div className="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm flex flex-col md:flex-row gap-6">

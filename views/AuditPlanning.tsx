@@ -19,7 +19,7 @@ import {
   Filter,
   CalendarDays
 } from 'lucide-react';
-import { USERS } from '../mockData';
+import { INITIAL_USERS } from '../mockData';
 
 interface AuditPlanningProps {
   plans: AuditPlan[];
@@ -112,7 +112,9 @@ const AuditPlanning: React.FC<AuditPlanningProps> = ({ plans, setPlans, role, on
     endDate: '',
     auditors: [] as string[],
     auditees: [] as string[],
-    attachmentName: ''
+    attachmentName: '',
+    auditType: 'Quality/InfoSec' as AuditPlan['auditType'],
+    processName: ''
   });
 
   // Filter States
@@ -122,8 +124,8 @@ const AuditPlanning: React.FC<AuditPlanningProps> = ({ plans, setPlans, role, on
 
   const isLead = role === 'LEAD_AUDITOR';
   
-  const ALL_AUDITORS = USERS.filter(u => u.role === 'AUDITOR' || u.role === 'LEAD_AUDITOR').map(u => u.name);
-  const ALL_AUDITEES = USERS.filter(u => u.role === 'AUDITEE').map(u => u.name);
+  const ALL_AUDITORS = INITIAL_USERS.filter((u: any) => u.role === 'AUDITOR' || u.role === 'LEAD_AUDITOR').map((u: any) => u.name);
+  const ALL_AUDITEES = INITIAL_USERS.filter((u: any) => u.role === 'AUDITEE').map((u: any) => u.name);
 
   const getNextStatus = (current: AuditStatus): AuditStatus | null => {
     switch (current) {
@@ -155,7 +157,9 @@ const AuditPlanning: React.FC<AuditPlanningProps> = ({ plans, setPlans, role, on
       endDate: plan.endDate,
       auditors: [...plan.auditors],
       auditees: [...plan.auditees],
-      attachmentName: plan.attachmentName || ''
+      attachmentName: plan.attachmentName || '',
+      auditType: plan.auditType,
+      processName: plan.processName
     });
     setShowModal(true);
   };
@@ -180,7 +184,9 @@ const AuditPlanning: React.FC<AuditPlanningProps> = ({ plans, setPlans, role, on
         endDate: formData.endDate,
         auditors: formData.auditors,
         auditees: formData.auditees,
-        attachmentName: formData.attachmentName
+        attachmentName: formData.attachmentName,
+        auditType: formData.auditType,
+        processName: formData.processName
       } : p));
       onNotify('Audit Plan updated successfully.', 'success');
     } else {
@@ -195,7 +201,9 @@ const AuditPlanning: React.FC<AuditPlanningProps> = ({ plans, setPlans, role, on
         attachmentName: formData.attachmentName || 'No attachment',
         status: AuditStatus.DRAFT,
         isLocked: false,
-        createdAt: now.toISOString()
+        createdAt: now.toISOString(),
+        auditType: formData.auditType,
+        processName: formData.processName
       };
       setPlans(prev => [newPlan, ...prev]);
       onNotify('New Audit Plan drafted.', 'success');
@@ -211,7 +219,9 @@ const AuditPlanning: React.FC<AuditPlanningProps> = ({ plans, setPlans, role, on
       endDate: '', 
       auditors: [], 
       auditees: [], 
-      attachmentName: '' 
+      attachmentName: '',
+      auditType: 'Quality/InfoSec',
+      processName: ''
     });
   };
 
@@ -247,7 +257,6 @@ const AuditPlanning: React.FC<AuditPlanningProps> = ({ plans, setPlans, role, on
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
         <div>
           <h3 className="text-3xl font-black text-gray-900 tracking-tight">Audit Schedule</h3>
-          <p className="text-base text-gray-500 font-medium mt-1">Manage lifecycle from Draft through Closure.</p>
         </div>
         
         {isLead && (
@@ -430,6 +439,33 @@ const AuditPlanning: React.FC<AuditPlanningProps> = ({ plans, setPlans, role, on
               </div>
               
               <div className="p-6 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="text-xs font-black text-gray-400 uppercase tracking-widest block mb-2">Audit Type</label>
+                    <select 
+                      required
+                      value={formData.auditType}
+                      onChange={(e) => setFormData({...formData, auditType: e.target.value as any})}
+                      className="w-full bg-gray-50 border-gray-200 border-2 rounded-xl p-3 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none font-bold text-sm appearance-none cursor-pointer"
+                    >
+                      <option value="Quality/InfoSec">Quality/InfoSec</option>
+                      <option value="Financial">Financial</option>
+                      <option value="Special Request">Special Request</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-black text-gray-400 uppercase tracking-widest block mb-2">Process Name</label>
+                    <input 
+                      required
+                      type="text" 
+                      placeholder="e.g. Access Control"
+                      value={formData.processName}
+                      onChange={(e) => setFormData({...formData, processName: e.target.value})}
+                      className="w-full bg-gray-50 border-gray-200 border-2 rounded-xl p-3 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none font-bold text-sm" 
+                    />
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="text-xs font-black text-gray-400 uppercase tracking-widest block mb-2">Start Date</label>
